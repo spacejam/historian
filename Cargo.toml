@@ -1,6 +1,6 @@
 [package]
 name = "historian"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Tyler Neely <t@jujit.su>"]
 description = "a high performance zero-config histogram implementation"
 license = "Apache-2.0"

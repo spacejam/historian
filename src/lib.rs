@@ -1,3 +1,9 @@
+//! A zero-config simple histogram collector. ~160ns/collection with a random input,
+//! ~65ns/collection on already existing metrics. Uses logarithmic bucketing
+//! rather than sampling have bounded (generally <0.5%) error percentiles.
+#![deny(missing_docs)]
+#![cfg_attr(test, deny(warnings))]
+
 extern crate coco;
 
 use radix::Radix;

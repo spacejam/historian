@@ -7,6 +7,7 @@ use super::*;
 
 const PRECISION: f64 = 100.;
 
+/// A histogram collector that uses zero-configuration logarithmic buckets.
 #[derive(Default)]
 pub struct Histo {
     inner: Radix,
@@ -30,6 +31,7 @@ impl Debug for Histo {
 }
 
 impl Histo {
+    /// Record a value.
     pub fn measure<T: Into<f64>>(&self, value: T) -> usize {
         self.total.fetch_add(1, Ordering::Relaxed);
 
@@ -41,6 +43,8 @@ impl Histo {
         old + 1
     }
 
+    /// Retrieve a percentile. Returns None if no metrics have been
+    /// collected yet.
     pub fn percentile<T: From<u64>>(&self, p: f64) -> Option<T> {
         assert!(p <= 100.);
 
@@ -62,6 +66,7 @@ impl Histo {
         None
     }
 
+    /// Dump out some common percentiles.
     pub fn print_percentiles(&self) {
         println!("{:?}", self);
     }
