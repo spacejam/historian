@@ -20,6 +20,10 @@ struct Node {
     children: Vec<Atomic<Node>>,
 }
 
+unsafe impl Send for Node {}
+
+unsafe impl Sync for Node {}
+
 impl Default for Node {
     fn default() -> Node {
         let children = rep_no_copy!(Atomic::null(); FANOUT);

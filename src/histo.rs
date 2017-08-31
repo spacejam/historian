@@ -15,13 +15,15 @@ pub struct Histo {
     total: AtomicUsize,
 }
 
+unsafe impl Send for Histo {}
+
 impl Debug for Histo {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         const PS: [f64; 10] = [0., 50., 75., 90., 95., 97.5, 99., 99.9, 99.99, 100.];
         f.write_str("Histogram[")?;
 
         for p in &PS {
-            let res = self.percentile::<u64>(*p);
+            let res = self.percentile(*p);
             let line = format!("({} -> {:?}) ", p, res);
             f.write_str(&*line)?;
         }
@@ -43,9 +45,9 @@ impl Histo {
         old + 1
     }
 
-    /// Retrieve a percentile. Returns None if no metrics have been
+    /// Retrieve a percentile [0-100]. Returns NAN if no metrics have been
     /// collected yet.
-    pub fn percentile<T: From<u64>>(&self, p: f64) -> Option<T> {
+    pub fn percentile(&self, p: f64) -> f64 {
         assert!(p <= 100.);
 
         let set = self.vals.read().unwrap();
@@ -59,11 +61,11 @@ impl Histo {
             total += count as f64;
 
             if total >= target {
-                return Some(decompress(*val));
+                return decompress(*val);
             }
         }
 
-        None
+        std::f64::NAN
     }
 
     /// Dump out some common percentiles.
@@ -99,14 +101,10 @@ fn compress<T: Into<f64>>(value: T) -> u16 {
 }
 
 // decompress takes a lossily shrunken u16 and returns an f64 within 1% of
-// the original float64 passed to compress.
-fn decompress<T: From<u64>>(compressed: u16) -> T {
-    let compressed: f64 = compressed.into();
-    let abs = compressed.abs();
-    let unboosted = abs / PRECISION;
-    let exp = unboosted.exp();
-    let decompressed = (exp - 1.) as u64;
-    decompressed.into()
+// the original passed to compress.
+fn decompress(compressed: u16) -> f64 {
+    let unboosted = compressed as f64 / PRECISION;
+    (unboosted.exp() - 1.)
 }
 
 #[test]
@@ -117,11 +115,55 @@ fn it_works() {
     assert_eq!(c.measure(3), 1);
     assert_eq!(c.measure(3), 2);
     assert_eq!(c.measure(4), 1);
-    assert_eq!(c.percentile(0.), Some(2_u64));
-    assert_eq!(c.percentile(40.), Some(2_u64));
-    assert_eq!(c.percentile(40.1), Some(3_u64));
-    assert_eq!(c.percentile(80.), Some(3_u64));
-    assert_eq!(c.percentile(80.1), Some(4_u64));
-    assert_eq!(c.percentile(100.), Some(4_u64));
+    assert_eq!(c.percentile(0.).round() as usize, 2);
+    assert_eq!(c.percentile(40.).round() as usize, 2);
+    assert_eq!(c.percentile(40.1).round() as usize, 3);
+    assert_eq!(c.percentile(80.).round() as usize, 3);
+    assert_eq!(c.percentile(80.1).round() as usize, 4);
+    assert_eq!(c.percentile(100.).round() as usize, 4);
     c.print_percentiles();
+}
+
+#[test]
+fn high_percentiles() {
+    let c = Histo::default();
+    for _ in 0..9000 {
+        c.measure(10);
+    }
+    for _ in 0..900 {
+        c.measure(25);
+    }
+    for _ in 0..90 {
+        c.measure(33);
+    }
+    for _ in 0..9 {
+        c.measure(47);
+    }
+    c.measure(500);
+    assert_eq!(c.percentile(0.).round() as usize, 10);
+    assert_eq!(c.percentile(99.).round() as usize, 25);
+    assert_eq!(c.percentile(99.89).round() as usize, 33);
+    assert_eq!(c.percentile(99.91).round() as usize, 47);
+    assert_eq!(c.percentile(99.99).round() as usize, 47);
+    assert_eq!(c.percentile(100.).round() as usize, 502);
+}
+
+#[test]
+fn multithreaded() {
+    use std::thread;
+    use std::sync::Arc;
+
+    let h = Arc::new(Histo::default());
+    let mut threads = vec![];
+
+    for _ in 0..10 {
+        let h = h.clone();
+        threads.push(thread::spawn(move || { h.measure(20); }));
+    }
+
+    for t in threads.into_iter() {
+        t.join().unwrap();
+    }
+
+    assert_eq!(h.percentile(50.).round() as usize, 20);
 }
