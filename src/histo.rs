@@ -23,8 +23,8 @@ impl Debug for Histo {
         f.write_str("Histogram[")?;
 
         for p in &PS {
-            let res = self.percentile(*p);
-            let line = format!("({} -> {:?}) ", p, res);
+            let res = self.percentile(*p).round();
+            let line = format!("({} -> {}) ", p, res);
             f.write_str(&*line)?;
         }
 
