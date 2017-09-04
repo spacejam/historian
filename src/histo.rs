@@ -73,6 +73,11 @@ impl Histo {
         println!("{:?}", self);
     }
 
+    /// Return the total number of observations in this histogram.
+    pub fn count(&self) -> usize {
+        self.total.load(Ordering::Acquire)
+    }
+
     fn ensure(&self, value: u16) {
         {
             let set = self.vals.read().unwrap();
