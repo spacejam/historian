@@ -1,6 +1,6 @@
 [package]
 name = "historian"
-version = "3.0.3"
+version = "3.0.4"
 authors = ["Tyler Neely <t@jujit.su>"]
 description = "a high performance zero-config histogram implementation"
 license = "Apache-2.0"
@@ -9,6 +9,10 @@ repository = "https://github.com/spacejam/historian"
 keywords = ["database", "embedded", "concurrent", "persistent", "lock-free"]
 documentation = "https://docs.rs/historian/"
 readme = "README.md"
+
+[features]
+default = []
+bypass = []
 
 [dependencies]
 coco = "0.2"

@@ -36,35 +36,46 @@ impl Debug for Histo {
 impl Histo {
     /// Record a value.
     pub fn measure<T: Into<f64>>(&self, value: T) -> usize {
-        let value = value.into();
-        self.sum.fetch_add(
-            value.round() as usize,
-            Ordering::Relaxed,
-        );
-        self.count.fetch_add(1, Ordering::Relaxed);
+        #[cfg(not(feature = "bypass"))]
+        {
+            let value = value.into();
+            self.sum.fetch_add(
+                value.round() as usize,
+                Ordering::Relaxed,
+            );
+            self.count.fetch_add(1, Ordering::Relaxed);
 
-        let compressed = compress(value);
-        self.ensure(compressed);
+            let compressed = compress(value);
+            self.ensure(compressed);
 
-        self.inner.incr(compressed)
+            self.inner.incr(compressed)
+        }
+
+        #[cfg(feature = "bypass")]
+        {
+            0
+        }
     }
 
     /// Retrieve a percentile [0-100]. Returns NAN if no metrics have been
     /// collected yet.
     pub fn percentile(&self, p: f64) -> f64 {
-        assert!(p <= 100.);
+        #[cfg(not(feature = "bypass"))]
+        {
+            assert!(p <= 100.);
 
-        let set = self.vals.read().unwrap();
+            let set = self.vals.read().unwrap();
 
-        let target = self.count.load(Ordering::Acquire) as f64 * (p / 100.);
-        let mut sum = 0.;
+            let target = self.count.load(Ordering::Acquire) as f64 * (p / 100.);
+            let mut sum = 0.;
 
-        for val in &*set {
-            let count = self.inner.get(*val);
-            sum += count as f64;
+            for val in &*set {
+                let count = self.inner.get(*val);
+                sum += count as f64;
 
-            if sum >= target {
-                return decompress(*val);
+                if sum >= target {
+                    return decompress(*val);
+                }
             }
         }
 
