@@ -12,7 +12,8 @@ const PRECISION: f64 = 100.;
 pub struct Histo {
     inner: Radix,
     vals: RwLock<BTreeSet<u16>>,
-    total: AtomicUsize,
+    sum: AtomicUsize,
+    count: AtomicUsize,
 }
 
 unsafe impl Send for Histo {}
@@ -35,7 +36,12 @@ impl Debug for Histo {
 impl Histo {
     /// Record a value.
     pub fn measure<T: Into<f64>>(&self, value: T) -> usize {
-        self.total.fetch_add(1, Ordering::Relaxed);
+        let value = value.into();
+        self.sum.fetch_add(
+            value.round() as usize,
+            Ordering::Relaxed,
+        );
+        self.count.fetch_add(1, Ordering::Relaxed);
 
         let compressed = compress(value);
         self.ensure(compressed);
@@ -52,15 +58,15 @@ impl Histo {
 
         let set = self.vals.read().unwrap();
 
-        let target = self.total.load(Ordering::Acquire) as f64 * (p / 100.);
-        let mut total = 0.;
+        let target = self.count.load(Ordering::Acquire) as f64 * (p / 100.);
+        let mut sum = 0.;
 
         for val in &*set {
             let ptr = self.inner.get(*val);
             let count = unsafe { (*ptr).load(Ordering::Acquire) };
-            total += count as f64;
+            sum += count as f64;
 
-            if total >= target {
+            if sum >= target {
                 return decompress(*val);
             }
         }
@@ -73,9 +79,14 @@ impl Histo {
         println!("{:?}", self);
     }
 
-    /// Return the total number of observations in this histogram.
+    /// Return the sum of all observations in this histogram.
+    pub fn sum(&self) -> usize {
+        self.sum.load(Ordering::Acquire)
+    }
+
+    /// Return the count of observations in this histogram.
     pub fn count(&self) -> usize {
-        self.total.load(Ordering::Acquire)
+        self.count.load(Ordering::Acquire)
     }
 
     fn ensure(&self, value: u16) {
