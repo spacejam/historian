@@ -1,6 +1,6 @@
 /// A simple lock-free radix tree, assumes a dense keyspace.
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::{Acquire, SeqCst};
+use std::sync::atomic::{ATOMIC_USIZE_INIT, AtomicUsize};
+use std::sync::atomic::Ordering::{Acquire, Relaxed, SeqCst};
 
 use coco::epoch::{Atomic, Owned, Ptr, Scope, pin, unprotected};
 
@@ -16,7 +16,7 @@ fn split_fanout(i: usize) -> (usize, usize) {
 }
 
 struct Node {
-    inner: *mut AtomicUsize,
+    inner: AtomicUsize,
     children: Vec<Atomic<Node>>,
 }
 
@@ -28,7 +28,7 @@ impl Default for Node {
     fn default() -> Node {
         let children = rep_no_copy!(Atomic::null(); FANOUT);
         Node {
-            inner: Box::into_raw(Box::new(AtomicUsize::new(0))),
+            inner: ATOMIC_USIZE_INIT,
             children: children,
         }
     }
@@ -38,8 +38,6 @@ impl Drop for Node {
     fn drop(&mut self) {
         unsafe {
             pin(|scope| {
-                drop(Box::from_raw(self.inner));
-
                 let children: Vec<*const Node> = self.children
                     .iter()
                     .map(|c| c.load(Acquire, scope).as_raw())
@@ -81,11 +79,21 @@ impl Drop for Radix {
 
 impl Radix {
     /// Try to get a value from the tree.
-    pub fn get<'s>(&self, id: u16) -> *mut AtomicUsize {
+    pub fn get(&self, id: u16) -> usize {
         unsafe {
             unprotected(|scope| {
                 let tip = traverse(self.head.load(Acquire, scope), id, true, scope);
-                tip.deref().inner
+                tip.deref().inner.load(Acquire)
+            })
+        }
+    }
+
+    /// Increment a value.
+    pub fn incr(&self, id: u16) -> usize {
+        unsafe {
+            unprotected(|scope| {
+                let tip = traverse(self.head.load(Acquire, scope), id, true, scope);
+                tip.deref().inner.fetch_add(1, Relaxed) + 1
             })
         }
     }
@@ -112,17 +120,17 @@ fn traverse<'s>(
             return Ptr::null();
         }
 
-        let next_child = Owned::new(Node::default()).into_ptr(scope);
-        let ret = children[child_index].compare_and_swap(next_ptr, next_child, SeqCst, scope);
-        if ret.is_ok() {
-            // CAS worked
-            next_ptr = next_child;
-        } else {
-            // another thread beat us, drop unused created
-            // child and use what is already set
-            next_ptr = ret.unwrap_err();
-            unsafe {
-                scope.defer_drop(next_child);
+        let next_child = Owned::new(Node::default());
+        match children[child_index].compare_and_swap_owned(next_ptr, next_child, SeqCst, scope) {
+            Err((actual, failure_child)) => {
+                // another thread beat us, drop unused created
+                // child and use what is already set
+                next_ptr = actual;
+                drop(failure_child);
+            }
+            Ok(next_child) => {
+                // CAS worked
+                next_ptr = next_child;
             }
         }
     }
@@ -138,19 +146,13 @@ fn test_split_fanout() {
 
 #[test]
 fn basic_functionality() {
-    use std::sync::atomic::Ordering::Relaxed;
-    unsafe {
-        let rt = Radix::default();
-        let ptr = rt.get(16);
-        (*ptr).fetch_add(1, Relaxed);
-        (*ptr).fetch_add(1, Relaxed);
+    let rt = Radix::default();
+    rt.incr(16);
+    rt.incr(16);
+    rt.incr(16);
+    rt.incr(16);
+    rt.incr(16);
 
-        let ptr = rt.get(16);
-        (*ptr).fetch_add(1, Relaxed);
-        (*ptr).fetch_add(1, Relaxed);
-        (*ptr).fetch_add(1, Relaxed);
-
-        let ptr = rt.get(16);
-        assert_eq!((*ptr).load(SeqCst), 5);
-    }
+    let count = rt.get(16);
+    assert_eq!(count, 5);
 }

@@ -46,9 +46,7 @@ impl Histo {
         let compressed = compress(value);
         self.ensure(compressed);
 
-        let counter = self.inner.get(compressed);
-        let old = unsafe { (*counter).fetch_add(1, Ordering::Release) };
-        old + 1
+        self.inner.incr(compressed)
     }
 
     /// Retrieve a percentile [0-100]. Returns NAN if no metrics have been
@@ -62,8 +60,7 @@ impl Histo {
         let mut sum = 0.;
 
         for val in &*set {
-            let ptr = self.inner.get(*val);
-            let count = unsafe { (*ptr).load(Ordering::Acquire) };
+            let count = self.inner.get(*val);
             sum += count as f64;
 
             if sum >= target {
