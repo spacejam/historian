@@ -1,6 +1,6 @@
 /// A simple lock-free radix tree, assumes a dense keyspace.
 use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
+use std::sync::atomic::Ordering::{Acquire, SeqCst};
 
 use coco::epoch::{Atomic, Owned, Ptr, Scope, pin, unprotected};
 
@@ -42,7 +42,7 @@ impl Drop for Node {
 
                 let children: Vec<*const Node> = self.children
                     .iter()
-                    .map(|c| c.load(SeqCst, scope).as_raw())
+                    .map(|c| c.load(Acquire, scope).as_raw())
                     .filter(|c| !c.is_null())
                     .collect();
 
@@ -72,7 +72,7 @@ impl Drop for Radix {
     fn drop(&mut self) {
         unsafe {
             unprotected(|scope| {
-                let head = self.head.load(SeqCst, scope).as_raw();
+                let head = self.head.load(Acquire, scope).as_raw();
                 drop(Box::from_raw(head as *mut Node));
             })
         }
@@ -84,7 +84,7 @@ impl Radix {
     pub fn get<'s>(&self, id: u16) -> *mut AtomicUsize {
         unsafe {
             unprotected(|scope| {
-                let tip = traverse(self.head.load(SeqCst, scope), id, true, scope);
+                let tip = traverse(self.head.load(Acquire, scope), id, true, scope);
                 tip.deref().inner
             })
         }
@@ -105,7 +105,7 @@ fn traverse<'s>(
     let (first_bits, remainder) = split_fanout(id as usize);
     let child_index = first_bits;
     let children = unsafe { &ptr.deref().children };
-    let mut next_ptr = children[child_index].load(SeqCst, scope);
+    let mut next_ptr = children[child_index].load(Acquire, scope);
 
     if next_ptr.is_null() {
         if !create_intermediate {
