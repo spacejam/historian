@@ -121,6 +121,9 @@ fn traverse<'s>(
             // another thread beat us, drop unused created
             // child and use what is already set
             next_ptr = ret.unwrap_err();
+            unsafe {
+                scope.defer_drop(next_child);
+            }
         }
     }
 
