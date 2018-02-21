@@ -1,12 +1,12 @@
 [package]
 name = "historian"
-version = "3.0.4"
+version = "3.0.5"
 authors = ["Tyler Neely <t@jujit.su>"]
 description = "a high performance zero-config histogram implementation"
 license = "Apache-2.0"
 homepage = "https://github.com/spacejam/historian"
 repository = "https://github.com/spacejam/historian"
-keywords = ["database", "embedded", "concurrent", "persistent", "lock-free"]
+keywords = ["metrics", "performance", "lock-free", "telemetry", "tuning"]
 documentation = "https://docs.rs/historian/"
 readme = "README.md"
 
@@ -15,4 +15,4 @@ default = []
 bypass = []
 
 [dependencies]
-coco = "0.2"
+crossbeam-epoch = "0.4"

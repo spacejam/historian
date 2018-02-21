@@ -2,7 +2,7 @@
 use std::sync::atomic::{ATOMIC_USIZE_INIT, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, SeqCst};
 
-use coco::epoch::{Atomic, Owned, Ptr, Scope, pin, unprotected};
+use crossbeam_epoch::{Atomic, Guard, Owned, Shared, pin, unprotected};
 
 const FANFACTOR: usize = 6;
 const FANOUT: usize = 1 << FANFACTOR;
@@ -36,18 +36,17 @@ impl Default for Node {
 
 impl Drop for Node {
     fn drop(&mut self) {
+        let guard = pin();
         unsafe {
-            pin(|scope| {
-                let children: Vec<*const Node> = self.children
-                    .iter()
-                    .map(|c| c.load(Acquire, scope).as_raw())
-                    .filter(|c| !c.is_null())
-                    .collect();
+            let children: Vec<*const Node> = self.children
+                .iter()
+                .map(|c| c.load(Acquire, &guard).as_raw())
+                .filter(|c| !c.is_null())
+                .collect();
 
-                for child in children {
-                    drop(Box::from_raw(child as *mut Node));
-                }
-            })
+            for child in children {
+                drop(Box::from_raw(child as *mut Node));
+            }
         }
     }
 }
@@ -61,7 +60,7 @@ impl Default for Radix {
     fn default() -> Radix {
         let head = Owned::new(Node::default());
         Radix {
-            head: Atomic::from_owned(head),
+            head: Atomic::from(head),
         }
     }
 }
@@ -69,10 +68,9 @@ impl Default for Radix {
 impl Drop for Radix {
     fn drop(&mut self) {
         unsafe {
-            unprotected(|scope| {
-                let head = self.head.load(Acquire, scope).as_raw();
-                drop(Box::from_raw(head as *mut Node));
-            })
+            let guard = unprotected();
+            let head = self.head.load(Acquire, guard).as_raw();
+            drop(Box::from_raw(head as *mut Node));
         }
     }
 }
@@ -80,32 +78,30 @@ impl Drop for Radix {
 impl Radix {
     /// Try to get a value from the tree.
     pub fn get(&self, id: u16) -> usize {
+        let guard = pin();
         unsafe {
-            unprotected(|scope| {
-                let tip = traverse(self.head.load(Acquire, scope), id, true, scope);
-                tip.deref().inner.load(Acquire)
-            })
+            let tip = traverse(self.head.load(Acquire, &guard), id, true, &guard);
+            tip.deref().inner.load(Acquire)
         }
     }
 
     /// Increment a value.
     pub fn incr(&self, id: u16) -> usize {
+        let guard = pin();
         unsafe {
-            unprotected(|scope| {
-                let tip = traverse(self.head.load(Acquire, scope), id, true, scope);
-                tip.deref().inner.fetch_add(1, Relaxed) + 1
-            })
+            let tip = traverse(self.head.load(Acquire, &guard), id, true, &guard);
+            tip.deref().inner.fetch_add(1, Relaxed) + 1
         }
     }
 }
 
 #[inline(always)]
 fn traverse<'s>(
-    ptr: Ptr<'s, Node>,
+    ptr: Shared<'s, Node>,
     id: u16,
     create_intermediate: bool,
-    scope: &'s Scope,
-) -> Ptr<'s, Node> {
+    guard: &'s Guard,
+) -> Shared<'s, Node> {
     if id == 0 {
         return ptr;
     }
@@ -113,29 +109,23 @@ fn traverse<'s>(
     let (first_bits, remainder) = split_fanout(id as usize);
     let child_index = first_bits;
     let children = unsafe { &ptr.deref().children };
-    let mut next_ptr = children[child_index].load(Acquire, scope);
+    let mut next_ptr = children[child_index].load(Acquire, guard);
 
     if next_ptr.is_null() {
         if !create_intermediate {
-            return Ptr::null();
+            return Shared::null();
         }
 
-        let next_child = Owned::new(Node::default());
-        match children[child_index].compare_and_swap_owned(next_ptr, next_child, SeqCst, scope) {
-            Err((actual, failure_child)) => {
-                // another thread beat us, drop unused created
-                // child and use what is already set
-                next_ptr = actual;
-                drop(failure_child);
-            }
-            Ok(next_child) => {
-                // CAS worked
-                next_ptr = next_child;
-            }
+        let next_child = Owned::new(Node::default()).into_shared(guard);
+        let ret = children[child_index].compare_and_set(next_ptr, next_child, SeqCst, guard);
+        if ret.is_ok() {
+            next_ptr = next_child;
+        } else {
+            next_ptr = ret.unwrap_err().current;
         }
     }
 
-    traverse(next_ptr, remainder as u16, create_intermediate, scope)
+    traverse(next_ptr, remainder as u16, create_intermediate, guard)
 }
 
 #[test]
