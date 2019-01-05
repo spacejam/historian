@@ -4,8 +4,6 @@
 #![deny(missing_docs)]
 #![cfg_attr(test, deny(warnings))]
 
-extern crate crossbeam_epoch;
-
 use self::radix::Radix;
 
 pub use self::histo::Histo;

@@ -2,7 +2,7 @@
 use std::sync::atomic::{ATOMIC_USIZE_INIT, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, SeqCst};
 
-use crossbeam_epoch::{Atomic, Guard, Owned, Shared, pin, unprotected};
+use sled_sync::{Atomic, Guard, Owned, Shared, pin, unprotected};
 
 const FANFACTOR: usize = 6;
 const FANOUT: usize = 1 << FANFACTOR;
