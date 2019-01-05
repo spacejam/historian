@@ -117,10 +117,15 @@ fn traverse<'s>(
         }
 
         let next_child = Owned::new(Node::default()).into_shared(guard);
-        let ret = children[child_index].compare_and_set(next_ptr, next_child, SeqCst, guard);
+        let ret = children[child_index].compare_and_set(next_ptr, next_child.clone(), SeqCst, guard);
         if ret.is_ok() {
             next_ptr = next_child;
         } else {
+            unsafe {
+                // must clean up the memory we failed to CAS in
+                // so it doesn't leak.
+                drop(next_child.into_owned())
+            }
             next_ptr = ret.unwrap_err().current;
         }
     }
