@@ -1,6 +1,6 @@
 [package]
 name = "historian"
-version = "3.0.6"
+version = "3.0.7"
 authors = ["Tyler Neely <t@jujit.su>"]
 description = "a high performance zero-config histogram implementation"
 license = "Apache-2.0"
@@ -9,10 +9,11 @@ repository = "https://github.com/spacejam/historian"
 keywords = ["metrics", "performance", "lock-free", "telemetry", "tuning"]
 documentation = "https://docs.rs/historian/"
 readme = "README.md"
+edition = "2018"
 
 [features]
 default = []
 bypass = []
 
 [dependencies]
-crossbeam-epoch = "0.7"
+crossbeam-epoch = "0.3"

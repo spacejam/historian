@@ -6,9 +6,9 @@
 
 extern crate crossbeam_epoch;
 
-use radix::Radix;
+use self::radix::Radix;
 
-pub use histo::Histo;
+pub use self::histo::Histo;
 
 macro_rules! rep_no_copy {
     ($e:expr; $n:expr) => {
