@@ -1,6 +1,6 @@
 [package]
 name = "historian"
-version = "3.0.5"
+version = "3.0.6"
 authors = ["Tyler Neely <t@jujit.su>"]
 description = "a high performance zero-config histogram implementation"
 license = "Apache-2.0"
@@ -15,4 +15,4 @@ default = []
 bypass = []
 
 [dependencies]
-crossbeam-epoch = "0.4"
+crossbeam-epoch = "0.7"
