@@ -72,7 +72,7 @@ impl Histo {
     /// Record a value.
     #[inline]
     pub fn measure<T: Into<f64>>(&self, raw_value: T) -> usize {
-        #[cfg(not(feature = "no_metrics"))]
+        #[cfg(not(feature = "disable"))]
         {
             let value_float: f64 = raw_value.into();
             self.sum
@@ -88,7 +88,7 @@ impl Histo {
             self.vals[compressed as usize].fetch_add(1, Ordering::Relaxed) + 1
         }
 
-        #[cfg(feature = "no_metrics")]
+        #[cfg(feature = "disable")]
         {
             0
         }
@@ -97,7 +97,7 @@ impl Histo {
     /// Retrieve a percentile [0-100]. Returns NAN if no metrics have been
     /// collected yet.
     pub fn percentile(&self, p: f64) -> f64 {
-        #[cfg(not(feature = "no_metrics"))]
+        #[cfg(not(feature = "disable"))]
         {
             assert!(p <= 100., "percentiles must not exceed 100.0");
 

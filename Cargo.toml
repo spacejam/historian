@@ -1,6 +1,6 @@
 [package]
 name = "historian"
-version = "4.0.2"
+version = "4.0.3"
 authors = ["Tyler Neely <t@jujit.su>"]
 description = "a high performance zero-config histogram implementation"
 license = "Apache-2.0"
@@ -10,3 +10,7 @@ keywords = ["metrics", "performance", "lock-free", "telemetry", "tuning"]
 documentation = "https://docs.rs/historian/"
 readme = "README.md"
 edition = "2018"
+
+[features]
+default = []
+disable = []
