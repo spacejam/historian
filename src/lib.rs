@@ -101,7 +101,17 @@ impl Histo {
         {
             assert!(p <= 100., "percentiles must not exceed 100.0");
 
-            let target = self.count.load(Ordering::Acquire) as f64 * (p / 100.);
+            let count = self.count.load(Ordering::Acquire);
+
+            if count == 0 {
+                return std::f64::NAN;
+            }
+
+            let mut target = count as f64 * (p / 100.);
+            if target == 0. {
+                target = 1.;
+            }
+
             let mut sum = 0.;
 
             for (idx, val) in self.vals.iter().enumerate() {
